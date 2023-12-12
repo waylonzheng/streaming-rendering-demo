@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>streaming-rendering-demo</title>
+</head>
+
+<body>
+  <style>
+    .item {
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      margin-top: 4px;
+    }
+  </style>
+  <div id="root">Loading...</div>
+  <script>
+    const root = document.getElementById('root');
+    // 通过isStreaming标识判断是否走流式渲染
+    const isStreaming = new URLSearchParams(location.search).get('isStreaming') === '1'
+    const startTime = Date.now();
+    // 绘制商品
+    const renderGoods = (item) => {
+      const el = document.createElement('div');
+      el.innerHTML = `id: ${item.goodsId}, color: ${item.color}, size: ${item.size}`;
+      el.className = 'item';
+      root.appendChild(el);
+    }
+    // 结束计时
+    const renderTimeText = (time) => {
+      const el = document.createElement('div');
+      el.innerHTML = `用时: ${time}ms`;
+      root.appendChild(el);
+    }
+    // 清理Loading
+    const clearLoading = () => {
+      root.innerHTML = '';
+    }
+    if (isStreaming) {
+      const utf8Decoder = new TextDecoder("utf-8");
+      fetch('http://localhost:3000/getGoodsByStream').then(async ({ body }) => {
+        const reader = body.getReader();
+        const processor = async () => {
+          const { done, value } = await reader.read();
+          if (done) {
+            return;
+          }
+          const chunk = utf8Decoder.decode(value, { stream: true });
+          const item = JSON.parse(chunk);
+          renderGoods(item);
+          // 递归直至读取完毕
+          await processor();
+        }
+        clearLoading();
+        await processor();
+        const endTime = Date.now();
+        const time = endTime - startTime;
+        renderTimeText(time);
+      })
+
+    } else {
+      fetch('/getGoods').then(res => res.json()).then(data => {
+        const endTime = Date.now();
+        const time = endTime - startTime;
+        clearLoading();
+        data.forEach((item) => {
+          renderGoods(item);
+        });
+        renderTimeText(time)
+      })
+    }
+  </script>
+</body>
+
+</html>
